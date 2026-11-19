@@ -1,0 +1,15 @@
+rules_version = '2';
+// Devil's Draft: the whole league is one document, leagues/dead-again.
+// Anyone with the app link can read it and save picks; the app checks PINs before writing.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /leagues/{leagueId} {
+      allow read: if leagueId == 'dead-again';
+      allow write: if leagueId == 'dead-again'
+        && request.resource.data.keys().hasAll(['phase', 'episodes', 'draftPicks', 'log']);
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

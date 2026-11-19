@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Devil's Draft</title>
+<meta name="description" content="Fantasy league for Devil's Plan: Dead Again">
+<meta name="theme-color" content="#0a080c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Devil's Draft">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 6 L22 22 M50 6 L42 22" stroke="#c4213a" stroke-width="5" stroke-linecap="round"/><path d="M32 16 L50 28 L32 60 L14 28 Z" fill="#8f1027"/><path d="M32 16 L50 28 L32 34 L14 28 Z" fill="#c4213a"/><path d="M32 34 L32 60 L14 28 Z" fill="#5c0918"/></svg>
+    <span>Devil's <em>Draft</em></span>
+  </a>
+  <span id="who"></span>
+</header>
+<div id="actas" class="actas" hidden></div>
+<div id="demo" class="demo" hidden>Demo mode · data is saved only in this browser</div>
+<nav class="tabs">
+  <a href="#/" data-nav=""><i>♛</i><span>Standings</span></a>
+  <a href="#/moves" data-nav="moves"><i>⇄</i><span>Draft</span></a>
+  <a href="#/picks" data-nav="picks"><i>✦</i><span>Picks</span></a>
+  <a href="#/cast" data-nav="cast"><i>☗</i><span>Players</span></a>
+  <a href="#/more" data-nav="more"><i>☰</i><span>More</span></a>
+</nav>
+<main id="view"><div class="loading">Summoning the league…</div></main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
