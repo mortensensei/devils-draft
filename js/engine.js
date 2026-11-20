@@ -12,6 +12,7 @@ export const EVENT_TYPES = [
   { key: 'secret', label: 'Finds a secret', pts: 3, group: 'Scoring' },
   { key: 'big_move', label: 'Successful betrayal / big strategic move', pts: 3, group: 'Scoring' },
   { key: 'sacrifice', label: 'Sacrifices resources to save another player', pts: 1, group: 'Scoring' },
+  { key: 'prison_saved', label: 'Saved from prison by the highest earner', pts: 1, group: 'Scoring' },
   // Penalties
   { key: 'main_last', label: 'Last / losing side of the main match', pts: -1, group: 'Penalties' },
   { key: 'death_sent', label: 'Sent to death match / prison / elimination zone', pts: -1, group: 'Penalties' },
