@@ -1,6 +1,6 @@
 import { LEAGUE as cfg } from './config.js';
 import { CONTESTANTS, RULES_HTML } from './data.js';
-import { A, CAST, EVENT, EVENT_TYPES, newEpisode, compute, onClock, snakeManager, moteTally, effectiveElimPick, parseTime, fmtTime } from './engine.js';
+import { A, CAST, EVENT, EVENT_TYPES, evPts, evLabel, newEpisode, compute, onClock, snakeManager, moteTally, effectiveElimPick, parseTime, fmtTime } from './engine.js';
 import { createStore } from './store.js';
 
 // ------------------------------------------------------------------ state
@@ -343,7 +343,7 @@ function viewEpisodes() {
       ${E.returned?.length ? `<p><b>Returned:</b> ${E.returned.map(cname).join(', ')}</p>` : ''}
       ${E.introActual ? `<p><b>Intro at</b> ${esc(E.introActual)}${introWinners.length ? ` · closest: ${introWinners.map(esc).join(', ')}` : ''}</p>` : ''}
       ${mw ? `<p><b>Moment of the Episode:</b> ${esc(mw.text)}</p>` : ''}
-      ${Object.keys(evs).length ? `<ul class="ledger">${Object.entries(evs).map(([cid, list]) => list.map(ev => `<li>${avatar(cid, 'xs')}<span><b>${cname(cid)}</b>: ${esc(EVENT[ev.type]?.label)}${ev.note ? ` <small class="muted">(${esc(ev.note)})</small>` : ''}</span>${pts(EVENT[ev.type]?.pts || 0)}</li>`).join('')).join('')}</ul>` : ''}
+      ${Object.keys(evs).length ? `<ul class="ledger">${Object.entries(evs).map(([cid, list]) => list.map(ev => `<li>${avatar(cid, 'xs')}<span><b>${cname(cid)}</b>: ${esc(evLabel(ev))}${ev.note ? ` <small class="muted">(${esc(ev.note)})</small>` : ''}</span>${pts(evPts(ev))}</li>`).join('')).join('')}</ul>` : ''}
       ${E.n >= cfg.scoringStartEp ? `<div class="epm">${cfg.managers.map(({ id }) => `<span><b>${esc(mname(id))}</b> ${pts(mgrPts[id] || 0)}</span>`).join('')}</div>` : ''}` : '<p class="muted">Results will appear here once the commissioner publishes them.</p>'}</section>`;
   }).join('');
 }
@@ -393,15 +393,17 @@ function viewAdmin() {
       ${E.status === 'open' ? `<button class="btn" data-act="epStatus" data-s="locked">1 · Lock picks</button>` : ''}
       ${E.status !== 'final' ? `<button class="btn primary" data-act="epStatus" data-s="final">Publish results</button>` : `<button class="btn" data-act="reopenEp">Reopen for edits</button>`}
     </div>
-    <h3>Picks</h3>${E.status === 'open' ? `<p class="muted small">Picks are hidden until you lock them (you're playing too!). Submitted: ${Object.keys(E.picks || {}).map(mname).join(', ') || 'nobody yet'}.</p>` : `<ul class="subs">${cfg.managers.map(({ id }) => { const p = E.picks?.[id]; const eff = effectiveElimPick(L, id, n, cfg.scoringStartEp); return `<li><span>${esc(mname(id))}</span><span>${p ? esc(p.intro || '—') : '—'} · ${eff ? cname(eff) + (p?.elim ? '' : ' <small class="muted">(carried)</small>') : '—'}</span></li>`; }).join('')}</ul>`}
+    <h3>Picks</h3>${E.status === 'open' && n === L.currentEp ? `<p class="muted small">Picks are hidden until you lock them (you're playing too!). Submitted: ${Object.keys(E.picks || {}).map(mname).join(', ') || 'nobody yet'}.</p>` : `<ul class="subs">${cfg.managers.map(({ id }) => { const p = E.picks?.[id]; const eff = effectiveElimPick(L, id, n, cfg.scoringStartEp); return `<li><span>${esc(mname(id))}${p?.editedAt ? ' <small class="muted">(corrected)</small>' : ''}</span><span>${p ? esc(p.intro || '—') : '—'} · ${eff ? cname(eff) + (p?.elim ? '' : ' <small class="muted">(carried)</small>') : '—'}<button class="btn ghost sm" data-act="editPick" data-mgr="${id}">Edit</button></span></li>`; }).join('')}</ul>`}
     <h3>Intro time</h3><div class="row"><input data-bind="intro${n}" value="${bind('intro' + n, E.introActual)}" placeholder="mm:ss"><button class="btn" data-act="setIntro">Save</button></div>
     <h3>Eliminated this episode</h3><div class="chips">${elimCands.map(c => `<button class="chip ${E.eliminated.includes(c) ? 'on' : ''}" data-act="toggleElim" data-cid="${c}">${avatar(c, 'xs')} ${cname(c)}</button>`).join('')}</div>
     ${retCands.length ? `<details><summary>Comebacks</summary><div class="chips">${retCands.map(c => `<button class="chip ${E.returned.includes(c) ? 'on' : ''}" data-act="toggleRet" data-cid="${c}">${cname(c)}</button>`).join('')}</div></details>` : ''}
     <h3>Scoring events</h3>
     <div class="form evform">${sel('evC', castOpts(CONTESTANTS.map(c => c.id)), '', 'Contestant…')}
       <select data-bind="evT"><option value="">Event…</option>${groups.map(g => `<optgroup label="${g}">${EVENT_TYPES.filter(e => e.group === g).map(e => `<option value="${e.key}" ${S.f.evT === e.key ? 'selected' : ''}>${e.pts > 0 ? '+' : ''}${e.pts} · ${esc(e.label)}</option>`).join('')}</optgroup>`).join('')}</select>
+      <label class="qty">How many? <input type="number" min="1" max="99" step="1" inputmode="numeric" data-bind="evQ" value="${bind('evQ', '1')}"></label>
       <input data-bind="evN" value="${bind('evN')}" placeholder="Note (optional)"><button class="btn primary" data-act="addEvent">Add event</button></div>
-    <ul class="ledger">${E.events.map(ev => `<li>${avatar(ev.cid, 'xs')}<span><b>${cname(ev.cid)}</b>: ${esc(EVENT[ev.type]?.label)}${ev.note ? ` (${esc(ev.note)})` : ''}</span>${pts(EVENT[ev.type]?.pts)}<button class="x" data-act="rmEvent" data-id="${ev.id}">✕</button></li>`).join('') || '<li class="muted">No events yet. “Survived the episode” (+1) is added automatically.</li>'}</ul>
+    <p class="muted small">“How many?” multiplies the points: 3 pieces = +3. Leave it at 1 for most events.</p>
+    <ul class="ledger">${E.events.map(ev => `<li>${avatar(ev.cid, 'xs')}<span><b>${cname(ev.cid)}</b>: ${esc(evLabel(ev))}${ev.note ? ` (${esc(ev.note)})` : ''}</span>${pts(evPts(ev))}<button class="x" data-act="rmEvent" data-id="${ev.id}">✕</button></li>`).join('') || '<li class="muted">No events yet. “Survived the episode” (+1) is added automatically.</li>'}</ul>
     <h3>Moment of the Episode</h3>
     <div class="form"><input data-bind="anom" value="${bind('anom')}" placeholder="Nominee description">${sel('anomc', castOpts(CONTESTANTS.map(c => c.id)), '', 'Contestant (gets +3)')}<button class="btn" data-act="adminNom">Add nominee</button></div>
     <ul class="ledger">${E.mote.nominees.map(x => `<li>${x.cid ? avatar(x.cid, 'xs') : ''}<span>${esc(x.text)} <small class="muted">${x.by !== 'admin' ? `by ${esc(mname(x.by))}` : ''}</small></span><b>${tally[x.id] || 0} votes</b>${E.mote.winner === x.id ? '<span class="pill hot">Winner</span>' : `<button class="btn ghost sm" data-act="moteWin" data-id="${x.id}">Make winner</button>`}<button class="x" data-act="rmNom" data-id="${x.id}">✕</button></li>`).join('')}</ul>
@@ -416,7 +418,7 @@ function viewAdmin() {
   <section class="card"><h2>Draft & trades</h2><div class="row wrap"><a class="btn" href="#/draft">Draft room</a><a class="btn" href="#/moves">Trade window</a></div></section>
 
   <section class="card"><h2>Import episode results</h2><p class="muted small">Paste results JSON (Claude can write this for you). Event types: ${EVENT_TYPES.map(e => `<code>${e.key}</code>`).join(' ')}</p>
-    <textarea data-bind="importJson" rows="6" placeholder='{"episode": 2, "introActual": "14:05", "eliminated": ["Shindong"], "events": [{"contestant": "Yurisa", "type": "main_win"}], "nominees": [{"text": "…", "contestant": "Yurisa"}]}'>${bind('importJson')}</textarea>
+    <textarea data-bind="importJson" rows="6" placeholder='{"episode": 2, "introActual": "14:05", "eliminated": ["Shindong"], "events": [{"contestant": "Yurisa", "type": "main_win"}, {"contestant": "Yurisa", "type": "piece", "count": 3}], "nominees": [{"text": "…", "contestant": "Yurisa"}]}'>${bind('importJson')}</textarea>
     <button class="btn" data-act="import">Import (doesn't publish)</button></section>
 
   <section class="card"><h2>Backup & tools</h2><div class="row wrap"><button class="btn" data-act="backup">Download backup</button><label class="btn">Restore backup<input type="file" accept=".json" data-act-file="restore" hidden></label></div>
@@ -557,13 +559,24 @@ const handlers = {
     act(L => A.setEpStatus(L, cfg, n, d.s), d.s === 'final' ? `Episode ${n} published.` : 'Picks locked.');
     if (d.s === 'final') S.f.admEp = String(n + 1);
   },
+  async editPick(d) {
+    const n = Number(S.f.admEp || S.L.currentEp), p = S.L.episodes[n]?.picks?.[d.mgr] || {};
+    const r = await modal({
+      title: `Edit ${esc(mname(d.mgr))}'s Episode ${n} picks`, ok: 'Save',
+      html: `<label>Intro time guess<input name="intro" value="${esc(p.intro || '')}" placeholder="mm:ss" autocomplete="off"></label>
+        <label>Elimination pick<select name="elim"><option value="">None (carry over earlier pick)</option>${CONTESTANTS.map(c => `<option value="${c.id}" ${p.elim === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+        <p class="muted small">Scores recalculate automatically, including for episodes already published.</p>`
+    });
+    if (r) act(L => A.adminSetPick(L, cfg, d.mgr, n, { intro: r.intro.trim(), elim: r.elim }), 'Picks updated.');
+  },
   reopenEp() { const n = Number(S.f.admEp || S.L.currentEp); return act(L => A.reopenEp(L, cfg, n), 'Reopened.'); },
   setIntro() { const n = Number(S.f.admEp || S.L.currentEp); return act(L => A.setIntroActual(L, cfg, n, (S.f['intro' + n] || '').trim()), 'Saved.'); },
   toggleElim(d) { const n = Number(S.f.admEp || S.L.currentEp); return act(L => A.toggleEliminated(L, cfg, n, d.cid)); },
   toggleRet(d) { const n = Number(S.f.admEp || S.L.currentEp); return act(L => A.toggleReturned(L, cfg, n, d.cid)); },
   async addEvent() {
     const n = Number(S.f.admEp || S.L.currentEp);
-    if (await act(L => A.addEvent(L, cfg, n, S.f.evC, S.f.evT, S.f.evN), 'Event added.')) { S.f.evN = ''; render(); }
+    const q = Number(S.f.evQ || 1);
+    if (await act(L => A.addEvent(L, cfg, n, S.f.evC, S.f.evT, S.f.evN, q), 'Event added.')) { S.f.evN = ''; S.f.evQ = '1'; render(); }
   },
   rmEvent(d) { const n = Number(S.f.admEp || S.L.currentEp); return act(L => A.removeEvent(L, cfg, n, d.id)); },
   async adminNom() {

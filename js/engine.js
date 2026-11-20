@@ -13,6 +13,7 @@ export const EVENT_TYPES = [
   { key: 'big_move', label: 'Successful betrayal / big strategic move', pts: 3, group: 'Scoring' },
   { key: 'sacrifice', label: 'Sacrifices resources to save another player', pts: 1, group: 'Scoring' },
   { key: 'prison_saved', label: 'Saved from prison by the highest earner', pts: 1, group: 'Scoring' },
+  { key: 'piece', label: 'Earns a piece', pts: 1, group: 'Scoring' },
   // Penalties
   { key: 'main_last', label: 'Last / losing side of the main match', pts: -1, group: 'Penalties' },
   { key: 'death_sent', label: 'Sent to death match / prison / elimination zone', pts: -1, group: 'Penalties' },
@@ -25,6 +26,10 @@ export const EVENT_TYPES = [
   { key: 'season_winner', label: 'Season winner', pts: 5, group: 'End of season' },
 ];
 export const EVENT = Object.fromEntries(EVENT_TYPES.map(e => [e.key, e]));
+// Points for one logged event, multiplied by its count (e.g. 3 pieces = 3 × 1).
+export const evQty = ev => Math.max(1, Math.floor(Number(ev?.qty) || 1));
+export const evPts = ev => (EVENT[ev?.type]?.pts || 0) * evQty(ev);
+export const evLabel = ev => (EVENT[ev?.type]?.label || '') + (evQty(ev) > 1 ? ` ×${evQty(ev)}` : '');
 export const PTS = { survive: 1, moment: 3, intro: 1, elimPred: 3, winnerPred: 5 };
 
 export const CAST = Object.fromEntries(CONTESTANTS.map(c => [c.id, c]));
@@ -65,6 +70,13 @@ export function parseTime(s) {
   const t = String(s).trim();
   if (!/^\d{1,3}(:\d{1,2}){0,2}$/.test(t)) return null;
   return t.split(':').map(Number).reduce((a, b) => a * 60 + b, 0);
+}
+// Intro guesses must look like m:ss / mm:ss or h:mm:ss, and be under 3 hours.
+export function validIntro(s) {
+  const t = String(s ?? '').trim();
+  if (!/^\d{1,3}:\d{2}(:\d{2})?$/.test(t)) return false;
+  const sec = parseTime(t);
+  return sec != null && sec < 3 * 3600 && t.split(':').slice(1).every(p => Number(p) < 60);
 }
 export function fmtTime(sec) {
   const m = Math.floor(sec / 60), s = sec % 60;
@@ -136,7 +148,7 @@ export function compute(L, cfg) {
     }
     for (const ev of E.events || []) {
       const t = EVENT[ev.type]; if (!t || !CAST[ev.cid]) continue;
-      credit(ev.cid, e, t.pts, t.label + (ev.note ? ` (${ev.note})` : ''));
+      credit(ev.cid, e, evPts(ev), evLabel(ev) + (ev.note ? ` (${ev.note})` : ''));
       if (ev.type === 'season_winner') seasonWinner = ev.cid;
     }
     const mw = E.mote?.winner && E.mote.nominees.find(n => n.id === E.mote.winner);
@@ -193,6 +205,7 @@ const fail = msg => { throw new Error(msg); };
 const name = (cfg, id) => cfg.managers.find(m => m.id === id)?.name || id;
 const log = (L, text) => { L.log.unshift({ at: Date.now(), text }); L.log = L.log.slice(0, 200); };
 const uid = L => `x${L.seq++}`;
+const MGR_OK = (cfg, id) => cfg.managers.some(m => m.id === id);
 
 export function onClock(L) {
   if (L.phase !== 'draft' || !L.draftOrder) return null;
@@ -265,9 +278,17 @@ export const A = {
   setEpPick(L, cfg, mgr, n, { intro, elim }) {
     const E = ep(L, n);
     if (n !== L.currentEp || E.status !== 'open') fail(`Picks for Episode ${n} are closed.`);
-    if (intro && parseTime(intro) == null) fail('Enter the intro time like 12:30.');
+    if (intro && !validIntro(intro)) fail('Enter the intro time as minutes:seconds, like 12:30 or 45:05.');
     if (elim && compute(L, cfg).elim[elim]) fail(`${CAST[elim].name} has already been eliminated.`);
     E.picks[mgr] = { intro: intro || '', elim: elim || '', at: Date.now() };
+  },
+  adminSetPick(L, cfg, mgr, n, { intro, elim }) {
+    if (!MGR_OK(cfg, mgr)) fail('Unknown manager.');
+    if (intro && !validIntro(intro)) fail('Enter the intro time as minutes:seconds, like 12:30 or 45:05.');
+    if (elim && !CAST[elim]) fail('Unknown contestant.');
+    const E = ep(L, n), old = E.picks[mgr] || {};
+    E.picks[mgr] = { ...old, intro: intro || '', elim: elim || '', at: old.at || Date.now(), editedAt: Date.now() };
+    log(L, `Commissioner corrected ${name(cfg, mgr)}'s Episode ${n} picks.`);
   },
   setEpStatus(L, cfg, n, status) {
     const E = ep(L, n); E.status = status;
@@ -275,9 +296,11 @@ export const A = {
     log(L, `Episode ${n} ${status === 'locked' ? 'picks locked' : status === 'final' ? 'scored and published' : 'reopened'}.`);
   },
   reopenEp(L, cfg, n) { ep(L, n).status = n === L.currentEp ? 'open' : 'locked'; log(L, `Episode ${n} reopened for editing.`); },
-  addEvent(L, cfg, n, cid, type, note) {
+  addEvent(L, cfg, n, cid, type, note, qty = 1) {
     if (!CAST[cid] || !EVENT[type]) fail('Choose a contestant and an event.');
-    ep(L, n).events.push({ id: uid(L), cid, type, note: note || '' });
+    const q = Number(qty);
+    if (!Number.isInteger(q) || q < 1 || q > 99) fail('The count must be a whole number from 1 to 99.');
+    ep(L, n).events.push({ id: uid(L), cid, type, note: note || '', qty: q });
   },
   removeEvent(L, cfg, n, id) { const E = ep(L, n); E.events = E.events.filter(e => e.id !== id); },
   toggleEliminated(L, cfg, n, cid) {
@@ -397,7 +420,7 @@ export const A = {
     const n = Number(data.episode); if (!n) fail('JSON needs an "episode" number.');
     const E = ep(L, n);
     const find = s => { const q = String(s).toLowerCase(); return CONTESTANTS.find(c => c.id === q || c.name.toLowerCase() === q || c.name.toLowerCase().startsWith(q))?.id || fail(`Unknown contestant "${s}".`); };
-    for (const ev of data.events || []) { if (!EVENT[ev.type]) fail(`Unknown event type "${ev.type}".`); E.events.push({ id: uid(L), cid: find(ev.contestant), type: ev.type, note: ev.note || '' }); }
+    for (const ev of data.events || []) { if (!EVENT[ev.type]) fail(`Unknown event type "${ev.type}".`); A.addEvent(L, cfg, n, find(ev.contestant), ev.type, ev.note, ev.count ?? 1); }
     for (const c of data.eliminated || []) { const id = find(c); if (!E.eliminated.includes(id)) E.eliminated.push(id); }
     for (const c of data.returned || []) { const id = find(c); if (!E.returned.includes(id)) E.returned.push(id); }
     if (data.introActual) A.setIntroActual(L, cfg, n, data.introActual);
